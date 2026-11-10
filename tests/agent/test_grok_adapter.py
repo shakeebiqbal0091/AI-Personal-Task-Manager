@@ -1,7 +1,7 @@
 import asyncio
 import json
 
-import httpx2
+import httpx
 import pytest
 from agents import Agent, RunConfig, Runner, function_tool
 from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel

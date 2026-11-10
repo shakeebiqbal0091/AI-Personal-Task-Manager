@@ -12,10 +12,13 @@ from app.tools.task_tools import TASK_TOOLS, TaskToolContext
 from app.worker.context import ConversationContext
 from app.worker.execution import execute_request
 from app.worker.instructions import WORKER_INSTRUCTIONS
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from app.worker.instructions import build_instructions
 
 XAI_BASE_URL = "https://api.x.ai/v1"
 DEFAULT_MODEL = "grok-4.7"
 DEFAULT_MAX_TURNS = 5
+DEFAULT_TIMEZONE = "UTC"
 DEFAULT_CONTEXT_MAX_MESSAGES = 20
 MAX_ALLOWED_TURNS = 10
 MAX_ALLOWED_CONTEXT_MESSAGES = 100
@@ -32,6 +35,7 @@ class WorkerSettings:
     model: str = DEFAULT_MODEL
     max_turns: int = DEFAULT_MAX_TURNS
     context_max_messages: int = DEFAULT_CONTEXT_MAX_MESSAGES
+    timezone: str = DEFAULT_TIMEZONE
 
     def __post_init__(self) -> None:
         api_key = self.api_key.strip()
@@ -51,6 +55,13 @@ class WorkerSettings:
                 "AI_CONTEXT_MAX_MESSAGES must be between 2 and "
                 f"{MAX_ALLOWED_CONTEXT_MESSAGES}."
             )
+        try:
+            ZoneInfo(self.timezone.strip())
+        except (ZoneInfoNotFoundError, ValueError):
+            raise WorkerConfigurationError(
+                "APP_TIMEZONE must be a valid IANA timezone, e.g. Asia/Karachi."
+            ) from None
+        object.__setattr__(self, "timezone", self.timezone.strip())
 
     @classmethod
     def from_environment(cls) -> "WorkerSettings":
@@ -65,6 +76,7 @@ class WorkerSettings:
             api_key=api_key,
             model=os.getenv("GROK_MODEL", DEFAULT_MODEL).strip(),
             max_turns=_environment_integer("AI_MAX_TURNS", DEFAULT_MAX_TURNS),
+            timezone=os.getenv("APP_TIMEZONE", DEFAULT_TIMEZONE),
             context_max_messages=_environment_integer(
                 "AI_CONTEXT_MAX_MESSAGES", DEFAULT_CONTEXT_MAX_MESSAGES
             ),
@@ -94,7 +106,7 @@ class ProductivityWorker:
         )
         self.agent = Agent(
             name="Personal Productivity Manager",
-            instructions=WORKER_INSTRUCTIONS,
+            instructions=build_instructions(ZoneInfo(self.settings.timezone)),
             model=model,
             tools=list(AUTHORIZED_TOOLS),
             handoffs=[],

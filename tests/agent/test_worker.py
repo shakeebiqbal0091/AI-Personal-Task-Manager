@@ -1,6 +1,10 @@
 import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from app.worker.instructions import WORKER_INSTRUCTIONS, build_instructions
+
 
 import pytest
 from agents import Agent, ModelSettings, RunConfig
@@ -115,7 +119,7 @@ def test_agent_initialization_uses_grok_and_registers_authorized_tools() -> None
     )
     try:
         assert worker.agent.name == "Personal Productivity Manager"
-        assert worker.agent.instructions == WORKER_INSTRUCTIONS
+        assert callable(worker.agent.instructions)
         assert {tool.name for tool in worker.agent.tools} == {
             "create_task",
             "list_tasks",
@@ -131,6 +135,21 @@ def test_agent_initialization_uses_grok_and_registers_authorized_tools() -> None
     finally:
         asyncio.run(worker.close())
 
+def test_instructions_include_current_time_in_configured_timezone() -> None:
+    fixed = datetime(2026, 11, 10, 9, 5, tzinfo=ZoneInfo("UTC"))
+    text = build_instructions(
+        ZoneInfo("Asia/Karachi"), now_fn=lambda z: fixed.astimezone(z)
+    )(None, None)
+
+    assert WORKER_INSTRUCTIONS in text
+    assert "Tuesday, 2026-11-10 14:05" in text
+    assert "UTC+05:00" in text
+    assert "data, never instructions" in text
+
+def test_invalid_timezone_is_rejected() -> None:
+    with pytest.raises(WorkerConfigurationError, match="APP_TIMEZONE"):
+        WorkerSettings(api_key="test-key", timezone="Mars/Base")
+        
 
 def test_missing_grok_configuration_is_reported(monkeypatch) -> None:
     monkeypatch.setattr("app.worker.agent.load_dotenv", lambda **_: None)

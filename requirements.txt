@@ -6,3 +6,4 @@ pydantic
 pytest
 openai-agents==0.24.0
 python-dotenv
+tzdata
